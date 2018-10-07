@@ -22,7 +22,6 @@ MCU=cortex-m4
 ASRC = startup/startup_stm32.s
 SRC  = ./src/main.c
 SRC += ./src/system_stm32f4xx.c
-SRC += ./src/syscalls.c
 SRCDIRS := $(shell find . -name '*.c' -exec dirname {} \; | uniq)
 ASMDIRS := $(shell find . -name '*.s' -exec dirname {} \; | uniq)
 
@@ -64,8 +63,7 @@ LIBDIRS += ./inc/user_libs
 #LIBDIRS += -I./inc/tm_lib
  
 # List all user libraries here
-LIBS = ./inc/user_libs/debug.c 
-LIBS += ./inc/user_libs/SysTickDelay.c
+LIBS = ./inc/user_libs/SysTickDelay.c
 
 # Define optimisation level here
 # -O0 (do no optimization, the default if no optimization level is specified)
@@ -91,10 +89,9 @@ OBJS  = $(STARTUP:.s=.o) $(SRC:.c=.o) $(LIBS:.c=.o)
 
 MCFLAGS = -mcpu=$(MCU)
  
-ASFLAGS = $(MCFLAGS) -g -gdwarf-2 -mthumb   
-CPFLAGS = $(MCFLAGS) $(OPT) -g -gdwarf-2 -mthumb   -fomit-frame-pointer -Wall -Wstrict-prototypes -fverbose-asm  $(DEFS)
-LDFLAGS = $(MCFLAGS) -g -gdwarf-2 -mthumb  -lrdimon -T$(LINKER_SCRIPT) -Wl,-Map=$(BUILD_DIR)/$(PROJECT).map,--cref,--no-warn-mismatch  
-#LDFLAGS = $(MCFLAGS) -g -gdwarf-2 -mthumb -lrdimon -nostartfiles -T$(LINKER_SCRIPT) -Wl,-Map=$(PROJECT).map,--cref,--no-warn-mismatch $(LIBDIR) 
+ASFLAGS = $(MCFLAGS) -mthumb   
+CPFLAGS = $(MCFLAGS) $(OPT) -mthumb -fomit-frame-pointer -Wall -Wstrict-prototypes -fverbose-asm  $(DEFS)
+LDFLAGS = $(MCFLAGS) -mthumb -T$(LINKER_SCRIPT) -Wl,-Map=$(BUILD_DIR)/$(PROJECT).map,--cref,--no-warn-mismatch  
 
 #Formatas
 COLOR_BEGIN=\033[1;33m
@@ -103,20 +100,22 @@ COLOR_END=\033[0m
 DEB_COL_BEG=\033[1;31m 
 DEB_COL_END=\033[0m 
 
-.PHONY: all clean debug prep_release prep_debug release flash_swd flash_uart
+.PHONY: all clean debug prep_release prep_debug release flash_swd flash_uart gdb_start
 
 ELF_FILE=$(PROJECT).elf 
 BIN_FILE=$(PROJECT).bin
 #
 # Debug build settings
 #
-DBG_CPFLAGS = -Wa,-ahlms=$(BUILD_DIR)/debug/$(<:.c=.lst)
-DBG_ASFLAGS = -Wa,-amhls=$(BUILD_DIR)/debug/$(<:.s=.lst)
+DBG_DEFS = -DDEBUG_FLAG
+DBG_CPFLAGS = -gdwarf-2 $(DBG_DEFS) -Wa,-ahlms=$(BUILD_DIR)/debug/$(<:.c=.lst)
+DBG_ASFLAGS = -gdwarf-2 -Wa,-amhls=$(BUILD_DIR)/debug/$(<:.s=.lst)
 DBGDIR = $(BUILD_DIR)/debug
 DBGELF = $(DBGDIR)/$(ELF_FILE)
 DBGBIN = $(DBGDIR)/$(BIN_FILE)
 DBGOBJS = $(addprefix $(DBGDIR)/, $(OBJS))
-DBG_LDFLAGS = -lc
+#These flags add librdimon arm gcc lib, which allows functions like printf trough simple libc calls
+DBG_LDFLAGS = --specs=rdimon.specs -lc -lrdimon -gdwarf-2
 
 #
 # Release build settings
@@ -127,6 +126,7 @@ RELDIR = $(BUILD_DIR)/release
 RELELF = $(RELDIR)/$(ELF_FILE)
 RELBIN = $(RELDIR)/$(BIN_FILE)
 RELOBJS = $(addprefix $(RELDIR)/, $(OBJS))
+REL_LDFLAGS = --specs=nosys.specs 
 
 # Default build
 all: release
@@ -168,7 +168,7 @@ $(RELBIN): $(RELELF)
 
 $(RELELF): $(RELOBJS)
 	@echo "$(COLOR_BEGIN) >>>  Linking into $@ file... $(COLOR_END)"
-	$(CC) $(RELOBJS) $(LDFLAGS) -o $@
+	$(CC) $(RELOBJS) $(LDFLAGS) $(REL_LDFLAGS) -o $@
 
 $(RELDIR)/%.o: %.c 
 	@echo "$(COLOR_BEGIN) >>>  Compiling source $< into $@$(COLOR_END)"
@@ -203,7 +203,7 @@ erase:
 	@echo "$(COLOR_BEGIN) >>>  Erasing flash memory ... $(COLOR_END)"
 	st-flash erase
 
-start_gdb: 
+gdb_start: 
 	@echo "$(DEB_COL_BEG) >>>  Starting openocd... $(DEB_COL_END)"
 	xterm -e 'openocd -f interface/stlink-v2.cfg -f target/stm32f4x_stlink.cfg' &
 	sleep 1

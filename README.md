@@ -7,7 +7,8 @@ Use	`make release`		to compile release executable
 	`make clean`		to clean project
 
 TODO:
-	*Add debugging defines in main and additional functionality in Makefile
-	*Repair the printf in debugging mode
-	*.gdbint has static path to executable
-
+	
+	* .gdbint has static path to executable
+	* Code with debugging symbols, semihosting and minimal libc ir 14kB in size
+	  But release variant is 11kB, which might be oversized.
+	* Cleaner way of implementing debug code in overall source should be introduced.
